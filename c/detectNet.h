@@ -23,6 +23,7 @@
 #ifndef __DETECT_NET_H__
 #define __DETECT_NET_H__
 
+#include <memory>
 
 #include "tensorNet.h"
 
@@ -219,6 +220,14 @@ public:
 #endif
 	};
 
+	// constructor
+	detectNet( float meanPixel=0.0f );
+
+	/**
+	 * Destory
+	 */
+	virtual ~detectNet();
+
 	/**
 	 * Parse a string to one of the built-in pretrained models.
 	 * Valid names are "pednet", "multiped", "facenet", "face", "coco-airplane", "airplane",
@@ -244,6 +253,16 @@ public:
 	static detectNet* Create( NetworkType networkType=NETWORK_DEFAULT, float threshold=DETECTNET_DEFAULT_CONFIDENCE_THRESHOLD, 
 						 uint32_t maxBatchSize=DEFAULT_MAX_BATCH_SIZE, precisionType precision=TYPE_FASTEST, 
 						 deviceType device=DEVICE_GPU, bool allowGPUFallback=true );
+
+	/**
+	 * Load a new network instance
+	 * @param networkType type of pre-supported network to load
+	 * @param threshold default minimum threshold for detection
+	 * @param maxBatchSize The maximum batch size that the network will support and be optimized for.
+	 */
+	static std::shared_ptr<detectNet> CreateShared( NetworkType networkType=NETWORK_DEFAULT, float threshold=DETECTNET_DEFAULT_CONFIDENCE_THRESHOLD, 
+						 uint32_t maxBatchSize=DEFAULT_MAX_BATCH_SIZE, precisionType precision=TYPE_FASTEST, 
+						 deviceType device=DEVICE_GPU, bool allowGPUFallback=true );
 								  
 	/**
 	 * Load a custom network instance
@@ -258,6 +277,27 @@ public:
 	 * @param maxBatchSize The maximum batch size that the network will support and be optimized for.
 	 */
 	static detectNet* Create( const char* prototxt_path, const char* model_path, float mean_pixel=0.0f, 
+						 const char* class_labels=NULL, float threshold=DETECTNET_DEFAULT_CONFIDENCE_THRESHOLD, 
+						 const char* input = DETECTNET_DEFAULT_INPUT, 
+						 const char* coverage = DETECTNET_DEFAULT_COVERAGE, 
+						 const char* bboxes = DETECTNET_DEFAULT_BBOX,
+						 uint32_t maxBatchSize=DEFAULT_MAX_BATCH_SIZE, 
+						 precisionType precision=TYPE_FASTEST,
+				   		 deviceType device=DEVICE_GPU, bool allowGPUFallback=true );
+
+	/**
+	 * Load a custom network instance
+	 * @param prototxt_path File path to the deployable network prototxt
+	 * @param model_path File path to the caffemodel
+	 * @param mean_pixel Input transform subtraction value (use 0.0 if the network already does this)
+	 * @param class_labels File path to list of class name labels
+	 * @param threshold default minimum threshold for detection
+	 * @param input Name of the input layer blob.
+	 * @param coverage Name of the output coverage classifier layer blob, which contains the confidence values for each bbox.
+	 * @param bboxes Name of the output bounding box layer blob, which contains a grid of rectangles in the image.
+	 * @param maxBatchSize The maximum batch size that the network will support and be optimized for.
+	 */
+	static std::shared_ptr<detectNet> CreateShared( const char* prototxt_path, const char* model_path, float mean_pixel=0.0f, 
 						 const char* class_labels=NULL, float threshold=DETECTNET_DEFAULT_CONFIDENCE_THRESHOLD, 
 						 const char* input = DETECTNET_DEFAULT_INPUT, 
 						 const char* coverage = DETECTNET_DEFAULT_COVERAGE, 
@@ -288,6 +328,29 @@ public:
 						 uint32_t maxBatchSize=DEFAULT_MAX_BATCH_SIZE, 
 						 precisionType precision=TYPE_FASTEST,
 				   		 deviceType device=DEVICE_GPU, bool allowGPUFallback=true );
+	
+	/**
+	 * Load a custom network instance
+	 * @param prototxt_path File path to the deployable network prototxt
+	 * @param model_path File path to the caffemodel
+	 * @param mean_pixel Input transform subtraction value (use 0.0 if the network already does this)
+	 * @param class_labels File path to list of class name labels
+	 * @param class_colors File path to list of class colors
+	 * @param threshold default minimum threshold for detection
+	 * @param input Name of the input layer blob.
+	 * @param coverage Name of the output coverage classifier layer blob, which contains the confidence values for each bbox.
+	 * @param bboxes Name of the output bounding box layer blob, which contains a grid of rectangles in the image.
+	 * @param maxBatchSize The maximum batch size that the network will support and be optimized for.
+	 */
+	static std::shared_ptr<detectNet> CreateShared( const char* prototxt_path, const char* model_path, float mean_pixel, 
+						 const char* class_labels, const char* class_colors,
+						 float threshold=DETECTNET_DEFAULT_CONFIDENCE_THRESHOLD, 
+						 const char* input = DETECTNET_DEFAULT_INPUT, 
+						 const char* coverage = DETECTNET_DEFAULT_COVERAGE, 
+						 const char* bboxes = DETECTNET_DEFAULT_BBOX,
+						 uint32_t maxBatchSize=DEFAULT_MAX_BATCH_SIZE, 
+						 precisionType precision=TYPE_FASTEST,
+				   		 deviceType device=DEVICE_GPU, bool allowGPUFallback=true );
 						 
 	/**
 	 * Load a custom network instance of a UFF model
@@ -308,24 +371,47 @@ public:
 				   		 deviceType device=DEVICE_GPU, bool allowGPUFallback=true );
 
 	/**
+	 * Load a custom network instance of a UFF model
+	 * @param model_path File path to the UFF model
+	 * @param class_labels File path to list of class name labels
+	 * @param threshold default minimum threshold for detection
+	 * @param input Name of the input layer blob.
+	 * @param inputDims Dimensions of the input layer blob.
+	 * @param output Name of the output layer blob containing the bounding boxes, ect.
+	 * @param numDetections Name of the output layer blob containing the detection count.
+	 * @param maxBatchSize The maximum batch size that the network will support and be optimized for.
+	 */
+	static std::shared_ptr<detectNet> CreateShared( const char* model_path, const char* class_labels, float threshold, 
+						 const char* input, const Dims3& inputDims, 
+						 const char* output, const char* numDetections,
+						 uint32_t maxBatchSize=DEFAULT_MAX_BATCH_SIZE, 
+						 precisionType precision=TYPE_FASTEST,
+				   		 deviceType device=DEVICE_GPU, bool allowGPUFallback=true );
+
+	/**
 	 * Load a new network instance by parsing the command line.
 	 */
 	static detectNet* Create( int argc, char** argv );
+
+	/**
+	 * Load a new network instance by parsing the command line.
+	 */
+	static std::shared_ptr<detectNet> CreateShared( int argc, char** argv );
 	
 	/**
 	 * Load a new network instance by parsing the command line.
 	 */
 	static detectNet* Create( const commandLine& cmdLine );
+
+	/**
+	 * Load a new network instance by parsing the command line.
+	 */
+	static std::shared_ptr<detectNet> CreateShared( const commandLine& cmdLine );
 	
 	/**
 	 * Usage string for command line arguments to Create()
 	 */
 	static inline const char* Usage() 		{ return DETECTNET_USAGE_STRING; }
-
-	/**
-	 * Destory
-	 */
-	virtual ~detectNet();
 	
 	/**
 	 * Detect object locations from an image, returning an array containing the detection results.
@@ -500,9 +586,6 @@ public:
 	void SetOverlayAlpha( float alpha );
 	
 protected:
-
-	// constructor
-	detectNet( float meanPixel=0.0f );
 
 	bool allocDetections();
 

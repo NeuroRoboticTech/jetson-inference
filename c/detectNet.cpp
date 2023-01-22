@@ -80,14 +80,17 @@ bool detectNet::init( const char* prototxt, const char* model, const char* class
 	LogInfo("detectNet -- loading detection network model from:\n");
 	LogInfo("          -- prototxt     %s\n", CHECK_NULL_STR(prototxt));
 	LogInfo("          -- model        %s\n", CHECK_NULL_STR(model));
-	LogInfo("          -- input_blob   '%s'\n", CHECK_NULL_STR(input_blob));
-	LogInfo("          -- output_cvg   '%s'\n", CHECK_NULL_STR(coverage_blob));
-	LogInfo("          -- output_bbox  '%s'\n", CHECK_NULL_STR(bbox_blob));
-	LogInfo("          -- mean_pixel   %f\n", mMeanPixel);
-	LogInfo("          -- class_labels %s\n", CHECK_NULL_STR(class_labels));
-	LogInfo("          -- class_colors %s\n", CHECK_NULL_STR(class_colors));
+	LogInfo("          -- class_labels   '%s'\n", CHECK_NULL_STR(class_labels));
+	LogInfo("          -- class_colors   '%s'\n", CHECK_NULL_STR(class_colors));
 	LogInfo("          -- threshold    %f\n", threshold);
-	LogInfo("          -- batch_size   %u\n\n", maxBatchSize);
+	LogInfo("          -- input_blob   '%s'\n", CHECK_NULL_STR(input_blob));
+	LogInfo("          -- coverage_blob   '%s'\n", CHECK_NULL_STR(coverage_blob));
+	LogInfo("          -- bbox_blob   '%s'\n", CHECK_NULL_STR(bbox_blob));
+	LogInfo("          -- batch_size   %u\n", maxBatchSize);
+	LogInfo("          -- precision   %s\n", precisionTypeToStr(precision));
+	LogInfo("          -- device   %s\n", deviceTypeToStr(device));
+	LogInfo("          -- allowGPUFallback   %d\n", static_cast<int>(allowGPUFallback));
+	LogInfo("          -- mean_pixel   %f\n\n", mMeanPixel);
 
 	// create list of output names	
 	std::vector<std::string> output_blobs;
@@ -145,6 +148,15 @@ detectNet* detectNet::Create( const char* prototxt, const char* model, float mea
 			    coverage_blob, bbox_blob, maxBatchSize, precision, device, allowGPUFallback);
 }
 
+// Create shared
+std::shared_ptr<detectNet> detectNet::CreateShared( const char* prototxt, const char* model, float mean_pixel, 
+						const char* class_labels, float threshold,
+						const char* input_blob, const char* coverage_blob, const char* bbox_blob, 
+						uint32_t maxBatchSize, precisionType precision, deviceType device, bool allowGPUFallback )
+{
+	return CreateShared(prototxt, model, mean_pixel, class_labels, NULL, threshold, input_blob,
+			    coverage_blob, bbox_blob, maxBatchSize, precision, device, allowGPUFallback);
+}
 
 // Create
 detectNet* detectNet::Create( const char* prototxt, const char* model, float mean_pixel, 
@@ -164,6 +176,23 @@ detectNet* detectNet::Create( const char* prototxt, const char* model, float mea
 	return net;
 }
 
+// Create shared
+std::shared_ptr<detectNet> detectNet::CreateShared( const char* prototxt, const char* model, float mean_pixel, 
+						const char* class_labels, const char* class_colors, float threshold,
+						const char* input_blob, const char* coverage_blob, const char* bbox_blob, 
+						uint32_t maxBatchSize, precisionType precision, deviceType device, bool allowGPUFallback )
+{
+	std::shared_ptr<detectNet> net = std::make_shared<detectNet>(mean_pixel);
+	
+	if( !net )
+		return NULL;
+
+	if( !net->init(prototxt, model, class_labels, class_colors, threshold, input_blob, coverage_blob, bbox_blob,
+				maxBatchSize, precision, device, allowGPUFallback) )
+		return NULL;
+
+	return net;
+}
 
 // Create (UFF)
 detectNet* detectNet::Create( const char* model, const char* class_labels, float threshold, 
@@ -218,6 +247,58 @@ detectNet* detectNet::Create( const char* model, const char* class_labels, float
 	return net;
 }
 
+// Create shared (UFF)
+std::shared_ptr<detectNet> detectNet::CreateShared( const char* model, const char* class_labels, float threshold, 
+						const char* input, const Dims3& inputDims, 
+						const char* output, const char* numDetections,
+						uint32_t maxBatchSize, precisionType precision,
+				   		deviceType device, bool allowGPUFallback )
+{
+	std::shared_ptr<detectNet> net = std::make_shared<detectNet>();
+	
+	if( !net )
+		return NULL;
+
+	LogInfo("\n");
+	LogInfo("detectNet -- loading detection network model from:\n");
+	LogInfo("          -- model        %s\n", CHECK_NULL_STR(model));
+	LogInfo("          -- input_blob   '%s'\n", CHECK_NULL_STR(input));
+	LogInfo("          -- output_blob  '%s'\n", CHECK_NULL_STR(output));
+	LogInfo("          -- output_count '%s'\n", CHECK_NULL_STR(numDetections));
+	LogInfo("          -- class_labels %s\n", CHECK_NULL_STR(class_labels));
+	LogInfo("          -- threshold    %f\n", threshold);
+	LogInfo("          -- batch_size   %u\n\n", maxBatchSize);
+	
+	// create list of output names	
+	std::vector<std::string> output_blobs;
+
+	if( output != NULL )
+		output_blobs.push_back(output);
+
+	if( numDetections != NULL )
+		output_blobs.push_back(numDetections);
+	
+	// load the model
+	if( !net->LoadNetwork(NULL, model, NULL, input, inputDims, output_blobs, 
+					  maxBatchSize, precision, device, allowGPUFallback) )
+	{
+		LogError(LOG_TRT "detectNet -- failed to initialize.\n");
+		return NULL;
+	}
+	
+	// allocate detection sets
+	if( !net->allocDetections() )
+		return NULL;
+
+	// load class descriptions
+	net->loadClassInfo(class_labels);
+	net->loadClassColors(NULL);
+
+	// set the specified threshold
+	net->SetConfidenceThreshold(threshold);
+
+	return net;
+}
 
 // Create
 detectNet* detectNet::Create( NetworkType networkType, float threshold, uint32_t maxBatchSize, 
@@ -268,6 +349,55 @@ detectNet* detectNet::Create( NetworkType networkType, float threshold, uint32_t
 #endif
 }
 
+// Create shared
+std::shared_ptr<detectNet> detectNet::CreateShared( NetworkType networkType, float threshold, uint32_t maxBatchSize, 
+						    precisionType precision, deviceType device, bool allowGPUFallback )
+{
+#if 1
+	if( networkType == PEDNET_MULTI )
+		return CreateShared("networks/multiped-500/deploy.prototxt", "networks/multiped-500/snapshot_iter_178000.caffemodel", 117.0f, "networks/multiped-500/class_labels.txt", threshold, DETECTNET_DEFAULT_INPUT, DETECTNET_DEFAULT_COVERAGE, DETECTNET_DEFAULT_BBOX, maxBatchSize, precision, device, allowGPUFallback );
+	else if( networkType == FACENET )
+		return CreateShared("networks/facenet-120/deploy.prototxt", "networks/facenet-120/snapshot_iter_24000.caffemodel", 0.0f, "networks/facenet-120/class_labels.txt", threshold, DETECTNET_DEFAULT_INPUT, DETECTNET_DEFAULT_COVERAGE, DETECTNET_DEFAULT_BBOX, maxBatchSize, precision, device, allowGPUFallback );
+	else if( networkType == PEDNET )
+		return CreateShared("networks/ped-100/deploy.prototxt", "networks/ped-100/snapshot_iter_70800.caffemodel", 0.0f, "networks/ped-100/class_labels.txt", threshold, DETECTNET_DEFAULT_INPUT, DETECTNET_DEFAULT_COVERAGE, DETECTNET_DEFAULT_BBOX, maxBatchSize, precision, device, allowGPUFallback );
+	else if( networkType == COCO_AIRPLANE )
+		return CreateShared("networks/DetectNet-COCO-Airplane/deploy.prototxt", "networks/DetectNet-COCO-Airplane/snapshot_iter_22500.caffemodel", 0.0f, "networks/DetectNet-COCO-Airplane/class_labels.txt", threshold, DETECTNET_DEFAULT_INPUT, DETECTNET_DEFAULT_COVERAGE, DETECTNET_DEFAULT_BBOX, maxBatchSize, precision, device, allowGPUFallback );
+	else if( networkType == COCO_BOTTLE )
+		return CreateShared("networks/DetectNet-COCO-Bottle/deploy.prototxt", "networks/DetectNet-COCO-Bottle/snapshot_iter_59700.caffemodel", 0.0f, "networks/DetectNet-COCO-Bottle/class_labels.txt", threshold, DETECTNET_DEFAULT_INPUT, DETECTNET_DEFAULT_COVERAGE, DETECTNET_DEFAULT_BBOX, maxBatchSize, precision, device, allowGPUFallback );
+	else if( networkType == COCO_CHAIR )
+		return CreateShared("networks/DetectNet-COCO-Chair/deploy.prototxt", "networks/DetectNet-COCO-Chair/snapshot_iter_89500.caffemodel", 0.0f, "networks/DetectNet-COCO-Chair/class_labels.txt", threshold, DETECTNET_DEFAULT_INPUT, DETECTNET_DEFAULT_COVERAGE, DETECTNET_DEFAULT_BBOX, maxBatchSize, precision, device, allowGPUFallback );
+	else if( networkType == COCO_DOG )
+		return CreateShared("networks/DetectNet-COCO-Dog/deploy.prototxt", "networks/DetectNet-COCO-Dog/snapshot_iter_38600.caffemodel", 0.0f, "networks/DetectNet-COCO-Dog/class_labels.txt", threshold, DETECTNET_DEFAULT_INPUT, DETECTNET_DEFAULT_COVERAGE, DETECTNET_DEFAULT_BBOX, maxBatchSize, precision, device, allowGPUFallback );
+#if NV_TENSORRT_MAJOR > 4
+	else if( networkType == SSD_INCEPTION_V2 )
+		return CreateShared("networks/SSD-Inception-v2/ssd_inception_v2_coco.uff", "networks/SSD-Inception-v2/ssd_coco_labels.txt", threshold, "Input", Dims3(3,300,300), "NMS", "NMS_1", maxBatchSize, precision, device, allowGPUFallback);
+	else if( networkType == SSD_MOBILENET_V1 )
+		return CreateShared("networks/SSD-Mobilenet-v1/ssd_mobilenet_v1_coco.uff", "networks/SSD-Mobilenet-v1/ssd_coco_labels.txt", threshold, "Input", Dims3(3,300,300), "Postprocessor", "Postprocessor_1", maxBatchSize, precision, device, allowGPUFallback);
+	else if( networkType == SSD_MOBILENET_V2 )
+		return CreateShared("networks/SSD-Mobilenet-v2/ssd_mobilenet_v2_coco.uff", "networks/SSD-Mobilenet-v2/ssd_coco_labels.txt", threshold, "Input", Dims3(3,300,300), "NMS", "NMS_1", maxBatchSize, precision, device, allowGPUFallback);
+#endif
+	else
+		return NULL;
+#else
+	if( networkType == PEDNET_MULTI )
+		return CreateShared("networks/multiped-500/deploy.prototxt", "networks/multiped-500/snapshot_iter_178000.caffemodel", "networks/multiped-500/mean.binaryproto", threshold, DETECTNET_DEFAULT_INPUT, DETECTNET_DEFAULT_COVERAGE, DETECTNET_DEFAULT_BBOX, maxBatchSize, precision, device, allowGPUFallback );
+	else if( networkType == FACENET )
+		return CreateShared("networks/facenet-120/deploy.prototxt", "networks/facenet-120/snapshot_iter_24000.caffemodel", NULL, threshold, DETECTNET_DEFAULT_INPUT, DETECTNET_DEFAULT_COVERAGE, DETECTNET_DEFAULT_BBOX, maxBatchSize, precision, device, allowGPUFallback );
+	else if( networkType == PEDNET )
+		return CreateShared("networks/ped-100/deploy.prototxt", "networks/ped-100/snapshot_iter_70800.caffemodel", "networks/ped-100/mean.binaryproto", threshold, DETECTNET_DEFAULT_INPUT, DETECTNET_DEFAULT_COVERAGE, DETECTNET_DEFAULT_BBOX, maxBatchSize, precision, device, allowGPUFallback );
+	else if( networkType == COCO_AIRPLANE )
+		return CreateShared("networks/DetectNet-COCO-Airplane/deploy.prototxt", "networks/DetectNet-COCO-Airplane/snapshot_iter_22500.caffemodel", "networks/DetectNet-COCO-Airplane/mean.binaryproto", threshold, DETECTNET_DEFAULT_INPUT, DETECTNET_DEFAULT_COVERAGE, DETECTNET_DEFAULT_BBOX, maxBatchSize, precision, device, allowGPUFallback );
+	else if( networkType == COCO_BOTTLE )
+		return CreateShared("networks/DetectNet-COCO-Bottle/deploy.prototxt", "networks/DetectNet-COCO-Bottle/snapshot_iter_59700.caffemodel", "networks/DetectNet-COCO-Bottle/mean.binaryproto", threshold, DETECTNET_DEFAULT_INPUT, DETECTNET_DEFAULT_COVERAGE, DETECTNET_DEFAULT_BBOX, maxBatchSize, precision, device, allowGPUFallback );
+	else if( networkType == COCO_CHAIR )
+		return CreateShared("networks/DetectNet-COCO-Chair/deploy.prototxt", "networks/DetectNet-COCO-Chair/snapshot_iter_89500.caffemodel", "networks/DetectNet-COCO-Chair/mean.binaryproto", threshold, DETECTNET_DEFAULT_INPUT, DETECTNET_DEFAULT_COVERAGE, DETECTNET_DEFAULT_BBOX, maxBatchSize, precision, device, allowGPUFallback );
+	else if( networkType == COCO_DOG )
+		return CreateShared("networks/DetectNet-COCO-Dog/deploy.prototxt", "networks/DetectNet-COCO-Dog/snapshot_iter_38600.caffemodel", "networks/DetectNet-COCO-Dog/mean.binaryproto", threshold, DETECTNET_DEFAULT_INPUT, DETECTNET_DEFAULT_COVERAGE, DETECTNET_DEFAULT_BBOX, maxBatchSize, precision, device, allowGPUFallback );
+	else 
+		return NULL;
+#endif
+}
+
 
 // NetworkTypeFromStr
 detectNet::NetworkType detectNet::NetworkTypeFromStr( const char* modelName )
@@ -312,6 +442,11 @@ detectNet* detectNet::Create( int argc, char** argv )
 	return Create(commandLine(argc, argv));
 }
 
+// Create shared
+std::shared_ptr<detectNet> detectNet::CreateShared( int argc, char** argv )
+{
+	return CreateShared(commandLine(argc, argv));
+}
 
 // Create
 detectNet* detectNet::Create( const commandLine& cmdLine )
@@ -392,7 +527,86 @@ detectNet* detectNet::Create( const commandLine& cmdLine )
 	
 	return net;
 }
+
+// Create shared
+std::shared_ptr<detectNet> detectNet::CreateShared( const commandLine& cmdLine )
+{
+	std::shared_ptr<detectNet> net;
+
+	// parse command line parameters
+	const char* modelName = cmdLine.GetString("network");
 	
+	if( !modelName )
+		modelName = cmdLine.GetString("model", "ssd-mobilenet-v2");
+
+	int maxBatchSize = cmdLine.GetInt("batch_size");
+	
+	if( maxBatchSize < 1 )
+		maxBatchSize = DEFAULT_MAX_BATCH_SIZE;
+	
+	// confidence used to be called threshold (support both)
+	float threshold = cmdLine.GetFloat("threshold");
+	
+	if( threshold == 0.0f )
+	{
+		threshold = cmdLine.GetFloat("confidence"); 
+		
+		if( threshold == 0.0f )
+			threshold = DETECTNET_DEFAULT_CONFIDENCE_THRESHOLD;
+	}
+
+	// parse the model type
+	const detectNet::NetworkType type = NetworkTypeFromStr(modelName);
+
+	if( type == detectNet::CUSTOM )
+	{
+		const char* prototxt     = cmdLine.GetString("prototxt");
+		const char* input        = cmdLine.GetString("input_blob");
+		const char* out_blob     = cmdLine.GetString("output_blob");
+		const char* out_cvg      = cmdLine.GetString("output_cvg");
+		const char* out_bbox     = cmdLine.GetString("output_bbox");
+		const char* class_labels = cmdLine.GetString("class_labels");
+		const char* class_colors = cmdLine.GetString("class_colors");
+		
+		if( !input ) 	
+			input = DETECTNET_DEFAULT_INPUT;
+
+		if( !out_blob )
+		{
+			if( !out_cvg )  out_cvg  = DETECTNET_DEFAULT_COVERAGE;
+			if( !out_bbox ) out_bbox = DETECTNET_DEFAULT_BBOX;
+		}
+
+		if( !class_labels )
+			class_labels = cmdLine.GetString("labels");
+
+		if( !class_colors )
+			class_colors = cmdLine.GetString("colors");
+		
+		float meanPixel = cmdLine.GetFloat("mean_pixel");
+
+		net = detectNet::CreateShared(prototxt, modelName, meanPixel, class_labels, class_colors, threshold, input, 
+					      out_blob ? NULL : out_cvg, out_blob ? out_blob : out_bbox, maxBatchSize);
+	}
+	else
+	{
+		// create detectNet from pretrained model
+		net = detectNet::CreateShared(type, threshold, maxBatchSize);
+	}
+
+	if( !net )
+		return NULL;
+
+	// enable layer profiling if desired
+	if( cmdLine.GetFlag("profile") )
+		net->EnableLayerProfiler();
+
+	// set some additional options
+	net->SetOverlayAlpha(cmdLine.GetFloat("alpha", DETECTNET_DEFAULT_ALPHA));
+	net->SetClusteringThreshold(cmdLine.GetFloat("clustering", DETECTNET_DEFAULT_CLUSTERING_THRESHOLD));
+	
+	return net;
+}
 
 // allocDetections
 bool detectNet::allocDetections()

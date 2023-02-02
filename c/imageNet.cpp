@@ -64,6 +64,25 @@ imageNet* imageNet::Create( imageNet::NetworkType networkType, uint32_t maxBatch
 	return net;
 }
 
+// CreateShared
+std::shared_ptr<imageNet> imageNet::CreateShared( imageNet::NetworkType networkType, uint32_t maxBatchSize, 
+					   precisionType precision, deviceType device, bool allowGPUFallback )
+{
+        std::shared_ptr<imageNet> net = std::make_shared<imageNet>();
+	
+	if( !net )
+		return NULL;
+	
+	if( !net->init(networkType, maxBatchSize, precision, device, allowGPUFallback) )
+	{
+		LogError(LOG_TRT "imageNet -- failed to initialize.\n");
+		return NULL;
+	}
+	
+	net->mNetworkType = networkType;
+	return net;
+}
+
 
 // Create
 imageNet* imageNet::Create( const char* prototxt_path, const char* model_path, const char* mean_binary,
@@ -71,6 +90,25 @@ imageNet* imageNet::Create( const char* prototxt_path, const char* model_path, c
 					   precisionType precision, deviceType device, bool allowGPUFallback )
 {
 	imageNet* net = new imageNet();
+	
+	if( !net )
+		return NULL;
+	
+	if( !net->init(prototxt_path, model_path, mean_binary, class_path, input, output, maxBatchSize, precision, device, allowGPUFallback) )
+	{
+		LogError(LOG_TRT "imageNet -- failed to initialize.\n");
+		return NULL;
+	}
+	
+	return net;
+}
+
+// CreateShared
+std::shared_ptr<imageNet> imageNet::CreateShared( const char* prototxt_path, const char* model_path, const char* mean_binary,
+					   const char* class_path, const char* input, const char* output, uint32_t maxBatchSize,
+					   precisionType precision, deviceType device, bool allowGPUFallback )
+{
+        std::shared_ptr<imageNet> net = std::make_shared<imageNet>();
 	
 	if( !net )
 		return NULL;
@@ -221,6 +259,12 @@ imageNet* imageNet::Create( int argc, char** argv )
 	return Create(commandLine(argc, argv));
 }
 
+// CreateShared
+std::shared_ptr<imageNet> imageNet::CreateShared( int argc, char** argv )
+{
+	return CreateShared(commandLine(argc, argv));
+}
+
 
 // Create
 imageNet* imageNet::Create( const commandLine& cmdLine )
@@ -257,6 +301,53 @@ imageNet* imageNet::Create( const commandLine& cmdLine )
 	{
 		// create from pretrained model
 		net = imageNet::Create(type);
+	}
+
+	if( !net )
+		return NULL;
+
+	// enable layer profiling if desired
+	if( cmdLine.GetFlag("profile") )
+		net->EnableLayerProfiler();
+
+	return net;
+}
+
+// CreateShared
+std::shared_ptr<imageNet> imageNet::CreateShared( const commandLine& cmdLine )
+{
+	std::shared_ptr<imageNet> net = NULL;
+
+	// obtain the network name
+	const char* modelName = cmdLine.GetString("network");
+	
+	if( !modelName )
+		modelName = cmdLine.GetString("model", "googlenet");
+	
+	// parse the network type
+	const imageNet::NetworkType type = NetworkTypeFromStr(modelName);
+
+	if( type == imageNet::CUSTOM )
+	{
+		const char* prototxt = cmdLine.GetString("prototxt");
+		const char* labels   = cmdLine.GetString("labels");
+		const char* input    = cmdLine.GetString("input_blob");
+		const char* output   = cmdLine.GetString("output_blob");
+
+		if( !input ) 	input    = IMAGENET_DEFAULT_INPUT;
+		if( !output )  output   = IMAGENET_DEFAULT_OUTPUT;
+		
+		int maxBatchSize = cmdLine.GetInt("batch_size");
+		
+		if( maxBatchSize < 1 )
+			maxBatchSize = DEFAULT_MAX_BATCH_SIZE;
+
+		net = imageNet::CreateShared(prototxt, modelName, NULL, labels, input, output, maxBatchSize);
+	}
+	else
+	{
+		// create from pretrained model
+		net = imageNet::CreateShared(type);
 	}
 
 	if( !net )

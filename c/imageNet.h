@@ -23,6 +23,7 @@
 #ifndef __IMAGE_NET_H__
 #define __IMAGE_NET_H__
 
+#include <memory>
 
 #include "tensorNet.h"
 
@@ -108,6 +109,15 @@ public:
 	static imageNet* Create( NetworkType networkType=GOOGLENET, uint32_t maxBatchSize=DEFAULT_MAX_BATCH_SIZE, 
 						precisionType precision=TYPE_FASTEST,
 				   		deviceType device=DEVICE_GPU, bool allowGPUFallback=true );
+
+	/**
+	 * Load a new network shared_ptr instance
+	 */
+	static std::shared_ptr<imageNet> CreateShared( 
+                                                NetworkType networkType=GOOGLENET,
+                                                uint32_t maxBatchSize=DEFAULT_MAX_BATCH_SIZE, 
+						precisionType precision=TYPE_FASTEST,
+				   		deviceType device=DEVICE_GPU, bool allowGPUFallback=true );
 	
 	/**
 	 * Load a new network instance
@@ -126,6 +136,24 @@ public:
 						uint32_t maxBatchSize=DEFAULT_MAX_BATCH_SIZE, 
 						precisionType precision=TYPE_FASTEST,
 				   		deviceType device=DEVICE_GPU, bool allowGPUFallback=true );
+
+	/**
+	 * Load a new network instance
+	 * @param prototxt_path File path to the deployable network prototxt
+	 * @param model_path File path to the caffemodel
+	 * @param mean_binary File path to the mean value binary proto (can be NULL)
+	 * @param class_labels File path to list of class name labels
+	 * @param input Name of the input layer blob.
+	 * @param output Name of the output layer blob.
+	 * @param maxBatchSize The maximum batch size that the network will support and be optimized for.
+	 */
+	static std::shared_ptr<imageNet> CreateShared( const char* prototxt_path, const char* model_path, 
+						const char* mean_binary, const char* class_labels, 
+						const char* input=IMAGENET_DEFAULT_INPUT, 
+						const char* output=IMAGENET_DEFAULT_OUTPUT, 
+						uint32_t maxBatchSize=DEFAULT_MAX_BATCH_SIZE, 
+						precisionType precision=TYPE_FASTEST,
+				   		deviceType device=DEVICE_GPU, bool allowGPUFallback=true );
 	
 	/**
 	 * Load a new network instance by parsing the command line.
@@ -135,12 +163,24 @@ public:
 	/**
 	 * Load a new network instance by parsing the command line.
 	 */
+	static std::shared_ptr<imageNet> CreateShared( int argc, char** argv );
+
+	/**
+	 * Load a new network instance by parsing the command line.
+	 */
 	static imageNet* Create( const commandLine& cmdLine );
+
+	/**
+	 * Load a new network instance by parsing the command line.
+	 */
+	static std::shared_ptr<imageNet> CreateShared( const commandLine& cmdLine );
 
 	/**
 	 * Usage string for command line arguments to Create()
 	 */
 	static inline const char* Usage() 		{ return IMAGENET_USAGE_STRING; }
+
+	imageNet();
 
 	/**
 	 * Destroy
@@ -212,8 +252,6 @@ public:
 	inline const char* GetNetworkName() const					{ return NetworkTypeToStr(mNetworkType); }
 
 protected:
-	imageNet();
-	
 	int  Classify( float* confidence=NULL );
 	bool PreProcess( void* image, uint32_t width, uint32_t height, imageFormat format );
 	bool Process();

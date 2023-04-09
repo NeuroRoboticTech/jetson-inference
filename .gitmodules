@@ -1,6 +1,6 @@
 [submodule "utils"]
 	path = utils
-	url = https://github.com/dusty-nv/jetson-utils
+	url = https://github.com/NeuroRoboticTech/jetson-utils.git
 	branch = master
 [submodule "tools/camera-capture"]
 	path = tools/camera-capture
@@ -12,7 +12,7 @@
 	branch = master
 [submodule "python/training/detection"]
 	path = python/training/detection
-	url = https://github.com/dusty-nv/pytorch-detection
+	url = https://github.com/NeuroRoboticTech/pytorch-detection.git
 	branch = master
 [submodule "python/training/segmentation"]
 	path = python/training/segmentation
